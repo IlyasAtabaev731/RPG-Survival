@@ -1,19 +1,23 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using JetBrains.Annotations;
 using UnityEngine;
 
 public class Character : MonoBehaviour
 {
     [SerializeField] private Animator _animator;
+    [SerializeField] private ParticleSystem _bleedHitEffect;
+    [SerializeField] private float _speed = 3f;
+    [SerializeField] private float _rotationSpeed = 5f;
+    [SerializeField] private float _attackAnimationTime = 0.7f;
+    [SerializeField] private float _attackCooldown = 0.8f;
+    [SerializeField] private int _maxHitPoints = 100;
+    [SerializeField] private Joystick _joystick;
+    [SerializeField] private float _minRangeToAttack = 2f;
     
-    [SerializeField] private const float _speed = 3f;
-    [SerializeField] private const float _attackAnimationTime = 0.7f;
-    [SerializeField] private const float _attackCooldown = 0.8f;
-
-    [SerializeField] private int _maxHitPoints = 15;
-
-    private int _hitPoints;
+    
+    public Health health;
 
     public bool isAttacking = false;
     public bool isRecharged = false;
@@ -21,14 +25,8 @@ public class Character : MonoBehaviour
     
     private Vector3 _lastDeltaPos;
 
-    public event Action OnHealthChange;
-
-    public event Action OnCharacterDeath;
-
-    public int MaxHp => _maxHitPoints;
-
-    public int Hp => _hitPoints;
-
+    private Transform _attackTarget;
+    
     public Vector3 MoveDirection => transform.forward;
 
     public float AttackCooldown => _attackCooldown;
@@ -41,20 +39,13 @@ public class Character : MonoBehaviour
 
     public void GetHit(int takenDamage)
     {
-        _hitPoints -= takenDamage;
-        
-        OnHealthChange?.Invoke();
-
-        if (_hitPoints <= 0)
-        {
-            Die();
-        }
+        Instantiate(_bleedHitEffect, transform.position + transform.up * 0.3f, Quaternion.identity);
+        health.Discard(takenDamage);
     }
 
     private void Die()
     {
-        OnCharacterDeath?.Invoke();
-        Destroy(gameObject);
+        State = States.DieWithMelee;
     }
 
     private void Attack()
@@ -89,40 +80,74 @@ public class Character : MonoBehaviour
         isRecharged = true;
         isCombed = !isCombed;
     }
+
+    private bool AutoClosestTarget(int numberOfRays = 30)
+    {
+        float angleOfRotate = 360 / numberOfRays;
+        float minDist = 1000f;
+        Transform targetTransform = transform;
+        bool isEnemyFound = false;
+        for (int i = 0; i < numberOfRays; i++)
+        {
+            Vector3 direction = Quaternion.Euler(0, angleOfRotate * i, 0) * transform.forward;
+            Ray ray = new Ray(transform.position + transform.up * 0.5f,  direction);
+            Physics.Raycast(ray, out RaycastHit hit);
+            if (hit.collider != null && hit.collider.gameObject.TryGetComponent(out Monster monster) && hit.distance < minDist)
+            {
+                targetTransform = monster.transform;
+                isEnemyFound = true;
+                minDist = hit.distance;
+            }
+        }
+
+        _attackTarget = targetTransform;
+        return isEnemyFound;
+    }
     
+    private void OnEnable()
+    {
+        health.OnDeath += Die;
+    }
+
     private void Awake()
     {
-        _hitPoints = _maxHitPoints;
+        health = new Health(_maxHitPoints);
         isRecharged = true;
     }
 
     private void Update()
     {
-        if (Input.GetButtonDown("Fire1") && isRecharged)
+        if (_joystick.Direction.magnitude > 0)
         {
-            Attack();
-        }
+            Vector3 deltaPos = new Vector3();
+            deltaPos.x = _joystick.Horizontal;
+            deltaPos.z = _joystick.Vertical;
+            deltaPos *= _speed * Time.deltaTime;
             
-        if (!isAttacking)
-        {
-            Vector3 deltaPos = Input.GetAxis("Vertical") * (new Vector3(0, 0, 1)) * _speed * Time.deltaTime +
-                               Input.GetAxis("Horizontal") * (new Vector3(1, 0, 0)) * _speed * Time.deltaTime;
             transform.position += deltaPos;
-            if (Mathf.Abs(deltaPos.x) > 0 || Mathf.Abs(deltaPos.z) > 0)
+            
+            if (deltaPos.magnitude > 0)
             {
                 _lastDeltaPos = deltaPos;
             }
             
-            if (Input.GetButton("Vertical") || Input.GetButton("Horizontal"))
-            {
-                State = States.Run;
-                transform.rotation = Quaternion.Lerp(transform.rotation, Quaternion.LookRotation(_lastDeltaPos), Time.deltaTime * 3);
-            }
-            else
-            {
-                State = States.Idle;
-            }
+            State = States.Run;
+            transform.rotation = Quaternion.Lerp(transform.rotation, Quaternion.LookRotation(_lastDeltaPos), Time.deltaTime * _rotationSpeed);
         }
+        else if(AutoClosestTarget() && Vector3.Distance(_attackTarget.position, transform.position) < _minRangeToAttack)
+        {
+            transform.LookAt(_attackTarget);
+            Attack();
+        }
+        if(!isAttacking && _joystick.Direction.magnitude == 0)
+        {
+            State = States.Idle;
+        }
+    }
+
+    private void OnDisable()
+    {
+        health.OnDeath -= Die;
     }
 }
 
@@ -131,5 +156,6 @@ enum States
     Idle,
     Run,
     MeleeAttack1,
-    MeleeAttack2
+    MeleeAttack2,
+    DieWithMelee
 }

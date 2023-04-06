@@ -6,26 +6,41 @@ using UnityEngine;
 public class MeleeWeapon : MonoBehaviour
 {
     [SerializeField] private Character _character;
-    [SerializeField] private const int _damage = 1;
-    [SerializeField] private const int _discardingPower = 100;
+    [SerializeField] private int _damage = 10;
+    [SerializeField] private int _discardingPower = 10;
     
     private bool _hitRecharged = true;
+    
+    private List<Monster> _currentTargets;
     
     private IEnumerator HitCooldown()
     {
         yield return new WaitForSeconds(_character.AttackCooldown);
         _hitRecharged = true;
     }
-    
+
+    private void Awake()
+    {
+        _currentTargets = new List<Monster>();
+    }
+
     private void OnTriggerEnter(Collider other)
     {
-        if (other.TryGetComponent(out Monster monster) && _character.isAttacking && _hitRecharged)
+        if (other.TryGetComponent(out Monster monster) && _character.isAttacking && !_currentTargets.Contains(monster))
         {
             Vector3 velocity = _character.MoveDirection;
-            velocity.y = 1f; 
             monster.GetHit(_damage, _character.MoveDirection * _discardingPower);
-            _hitRecharged = false;
-            StartCoroutine(HitCooldown());
+            _currentTargets.Add(monster);
+            // _hitRecharged = false;
+            // StartCoroutine(HitCooldown());
+        }
+    }
+
+    private void OnTriggerExit(Collider other)
+    {
+        if (other.TryGetComponent(out Monster monster) && _character.isAttacking && _currentTargets.Contains(monster))
+        {
+            _currentTargets.Remove(monster);
         }
     }
 }

@@ -8,11 +8,12 @@ using UnityEngine.TextCore.Text;
 public class Monster : MonoBehaviour
 {
     [SerializeField] private Rigidbody _rigidbody;
-    
-    [SerializeField] private int _hitPoints = 3;
-    [SerializeField] private const float _speedMovement = 2f;
-    [SerializeField] private const int _damage = 1;
-    [SerializeField] private const float _attackSpeed = 1f;
+    [SerializeField] private DamageInfoEffect _damageInfoEffect;
+    [SerializeField] private ParticleSystem _hitEffect;
+    [SerializeField] private int _hitPoints = 30;
+    [SerializeField] private float _speedMovement = 2f;
+    [SerializeField] private int _damage = 5;
+    [SerializeField] private float _attackSpeed = 1f;
 
     public Character Target;
     private bool _hitRecharged = true;
@@ -20,7 +21,9 @@ public class Monster : MonoBehaviour
     public void GetHit(int takenDamage, Vector3 takenVelocity)
     {
         _hitPoints -= takenDamage;
-        
+        DamageInfoEffect damageInfoEffect = Instantiate(_damageInfoEffect, transform.position, Quaternion.identity);
+        damageInfoEffect.Init(takenDamage);
+        Instantiate(_hitEffect, transform.position, Quaternion.identity);
         if (_hitPoints <= 0)
         {
             Die();
@@ -43,7 +46,6 @@ public class Monster : MonoBehaviour
     {
         Destroy(gameObject);
     }
-
 
     private IEnumerator HitCooldown()
     {
